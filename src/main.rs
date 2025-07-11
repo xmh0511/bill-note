@@ -44,6 +44,7 @@ async fn main() {
 
     let bill_router = Router::with_path("bill");
     let bill_router = bill_router.push(Router::with_path("list").get(bill::bill_list));
+    let bill_router = bill_router.push(Router::with_path("add").post(bill::bill_add));
     let auth_router = Router::with_hoop(auth_handler)
         .hoop(auth::check_auth_id)
         .push(bill_router);
