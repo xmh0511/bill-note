@@ -1,8 +1,12 @@
 use crate::{auth::Authority, error::*, orm};
 use anyhow::anyhow;
-use chrono::NaiveDate;
+use chrono::{Local, NaiveDate};
+use rust_decimal::prelude::*;
 use salvo::prelude::*;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Statement, Value};
+use sea_orm::{
+    ActiveModelBehavior, ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter,
+    Statement, Value,
+};
 use serde_json::json;
 
 use crate::orm::model::{prelude::*, *};
@@ -48,18 +52,18 @@ pub async fn login(req: &mut Request, res: &mut Response, depot: &mut Depot) -> 
 pub async fn bill_list(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
     let user_id = *depot
         .get::<i32>("user_id")
-        .map_err(|_e| JsonErr::from_error(403, anyhow!("unknown users")))?;
+        .map_err(|_e| JsonErr::from_error(401, anyhow!("unknown user")))?;
     let start_date = req
         .query::<String>("begin")
         .ok_or(JsonErr::from_error(400, anyhow!("未获取到起始日期")))?;
     let begin = NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
-        .map_err(|e| JsonErr::from_error(403, anyhow!("起始日期解析错误：{}", e)))?;
+        .map_err(|e| JsonErr::from_error(400, anyhow!("起始日期解析错误：{}", e)))?;
 
     let end_date = req
         .query::<String>("end")
         .ok_or(JsonErr::from_error(400, anyhow!("未获取到结束日期")))?;
     let end = NaiveDate::parse_from_str(&end_date, "%Y-%m-%d")
-        .map_err(|e| JsonErr::from_error(403, anyhow!("结束日期解析错误：{}", e)))?;
+        .map_err(|e| JsonErr::from_error(400, anyhow!("结束日期解析错误：{}", e)))?;
 
     let delta_time = end.signed_duration_since(begin);
 
@@ -137,6 +141,82 @@ WHERE
                     "pay_amount":pay_amount
                 }
             }
+        })
+        .to_string(),
+    ));
+    Ok(())
+}
+
+#[handler]
+pub async fn bill_add(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
+    let user_id = *depot
+        .get::<i32>("user_id")
+        .map_err(|_e| JsonErr::from_error(401, anyhow!("unknown user")))?;
+    let pay = req
+        .form::<String>("pay")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到支出金额")))?;
+    let pay = Decimal::from_str(&pay)
+        .map_err(|e| JsonErr::from_error(400, anyhow!("无效的支出金额 {e}")))?;
+    let pay_method = req
+        .form::<String>("pay_method")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到支付方式")))?;
+    let comment = req
+        .form::<String>("comment")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到备注")))?;
+    let transaction_date = req
+        .form::<String>("transaction_date")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到交易日期")))?;
+
+    let transaction_date = NaiveDate::parse_from_str(&transaction_date, "%Y-%m-%d")
+        .map_err(|e| JsonErr::from_error(400, anyhow!("交易日期解析错误：{}", e)))?;
+
+    let tag_id = req
+        .form::<i32>("tag_id")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到交易标签")))?;
+
+    let db = orm::get_dao()?;
+    if TagTb::find()
+        .filter(tag_tb::Column::Id.eq(tag_id))
+        .filter(tag_tb::Column::UserId.eq(user_id))
+        .one(db)
+        .await
+        .map_err(|e| JsonErr::from_error(500, anyhow!(e)))?
+        .is_none()
+    {
+        res.render(Text::Json(
+            json!({
+                "status":"error",
+                "code":400,
+                "msg":"无效的标签"
+            })
+            .to_string(),
+        ));
+        return Ok(());
+    }
+
+    let mut info = bill_tb::ActiveModel::new();
+    info.comment = Set(Some(comment));
+    info.pay = Set(Some(pay));
+    info.pay_method = Set(pay_method);
+    info.transaction_date = Set(transaction_date);
+    info.user_id = Set(user_id);
+    info.tag_id = Set(tag_id);
+    let now = Local::now().naive_local();
+    info.created_time = Set(now);
+    info.updated_time = Set(now);
+    info.insert(db)
+        .await
+        .map_err(|e| JsonErr::from_error(500, anyhow!(e)))?;
+    res.render(Text::Json(
+        json!({
+            "status":"success",
+            "code":200,
+            "msg":"新增成功"
         })
         .to_string(),
     ));
