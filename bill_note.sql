@@ -11,7 +11,7 @@
  Target Server Version : 50560
  File Encoding         : 65001
 
- Date: 11/07/2025 11:49:08
+ Date: 11/07/2025 14:12:28
 */
 
 SET NAMES utf8mb4;
@@ -30,6 +30,7 @@ CREATE TABLE `bill_tb`  (
   `updated_time` datetime NOT NULL,
   `pay_method` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '支付方式',
   `user_id` int(11) NOT NULL,
+  `pay` decimal(12, 2) NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `tag_id`(`tag_id`) USING BTREE,
   CONSTRAINT `tag_id` FOREIGN KEY (`tag_id`) REFERENCES `tag_tb` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
@@ -44,6 +45,7 @@ CREATE TABLE `tag_tb`  (
   `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '标签名',
   `created_time` datetime NOT NULL,
   `updated_time` datetime NOT NULL,
+  `user_id` int(11) NOT NULL,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
 
@@ -58,6 +60,6 @@ CREATE TABLE `user_tb`  (
   `created_time` datetime NOT NULL,
   `updated_time` datetime NOT NULL,
   PRIMARY KEY (`id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
+) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
 
 SET FOREIGN_KEY_CHECKS = 1;

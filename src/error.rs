@@ -6,7 +6,7 @@ impl JsonErr {
     pub fn from_value(val: Value) -> Self {
         JsonErr(val)
     }
-    pub fn from_error<E: std::error::Error>(code: i32, msg: E) -> Self {
+    pub fn from_error(code: i32, msg: anyhow::Error) -> Self {
         JsonErr(json!({
             "status":"error",
             "code":code,

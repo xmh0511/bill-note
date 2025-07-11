@@ -1,4 +1,5 @@
 use crate::error::{JsonErr, JsonResult};
+use anyhow::anyhow;
 use jsonwebtoken::{self, EncodingKey};
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,7 +26,7 @@ impl Authority {
             &claim,
             &EncodingKey::from_secret(self.secret_key.as_bytes()),
         )
-        .map_err(|e| JsonErr::from_error(500, e))
+        .map_err(|e| JsonErr::from_error(500, anyhow!(e)))
     }
 }
 
@@ -40,4 +41,25 @@ impl Authority {
 pub struct JwtClaims {
     id: i32,
     exp: i64,
+}
+
+#[handler]
+pub async fn check_auth_id(
+    req: &mut Request,
+    res: &mut Response,
+    depot: &mut Depot,
+    ctrl: &mut FlowCtrl,
+) -> JsonResult<()> {
+    match depot.jwt_auth_state() {
+        JwtAuthState::Authorized => {
+            let data = depot.jwt_auth_data::<JwtClaims>().unwrap();
+            depot.insert("user_id", data.claims.id);
+            ctrl.call_next(req, depot, res).await;
+            Ok(())
+        }
+        _ => {
+            ctrl.skip_rest();
+            return Err(JsonErr::from_error(401, anyhow!("UnAuthorized")));
+        }
+    }
 }

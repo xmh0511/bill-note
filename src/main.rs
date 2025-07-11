@@ -4,6 +4,7 @@ use salvo::prelude::*;
 use serde::Deserialize;
 use tracing_appender::non_blocking::WorkerGuard;
 mod auth;
+mod bill;
 mod error;
 mod orm;
 use auth::{Authority, JwtClaims};
@@ -39,7 +40,12 @@ async fn main() {
     let authority = Authority::new(config.secret_key);
 
     let router = Router::new().hoop(authority);
-    let router = router.push(Router::with_path("hello").get(hello_zh));
+    let router = router.push(Router::with_path("login").post(bill::login));
+    let auth_router = Router::with_hoop(auth_handler)
+        .hoop(auth::check_auth_id)
+        .push(Router::with_path("list").get(bill::bill_list));
+
+    let router = router.push(auth_router);
 
     Server::new(acceptor).serve(router).await;
 }

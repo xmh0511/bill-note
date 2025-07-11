@@ -25,3 +25,5 @@ tracing-subscriber = { version = "0.3", features = [
 tracing-appender = "0.2"
 jsonwebtoken = "9.3.1"
 rust_decimal = "1.37.2"
+anyhow = "1.0.98"
+md5 = "0.8.0"

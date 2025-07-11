@@ -15,6 +15,8 @@ pub struct Model {
     pub updated_time: DateTime,
     pub pay_method: String,
     pub user_id: i32,
+    #[sea_orm(column_type = "Decimal(Some((12, 2)))", nullable)]
+    pub pay: Option<Decimal>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
