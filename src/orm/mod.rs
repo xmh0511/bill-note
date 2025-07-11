@@ -3,6 +3,8 @@ use sea_orm::{Database, DatabaseConnection};
 use serde_json::json;
 use std::sync::OnceLock;
 
+pub mod model;
+
 static DAO: OnceLock<DatabaseConnection> = OnceLock::new();
 
 pub fn get_dao() -> JsonResult<&'static DatabaseConnection> {
@@ -18,5 +20,5 @@ pub async fn init_dao(database_url: String) {
         .await
         .expect("database init error");
     DAO.set(db)
-        .expect("not possible other threads can init database connection");
+        .expect("not possible that other threads can init database connection");
 }

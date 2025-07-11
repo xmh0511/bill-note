@@ -207,6 +207,7 @@ dependencies = [
  "chrono",
  "config-file",
  "jsonwebtoken",
+ "rust_decimal",
  "salvo",
  "sea-orm",
  "serde",
