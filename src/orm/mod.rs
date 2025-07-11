@@ -7,6 +7,7 @@ static DAO: OnceLock<DatabaseConnection> = OnceLock::new();
 
 pub fn get_dao() -> JsonResult<&'static DatabaseConnection> {
     DAO.get().ok_or(JsonErr::from_value(json!({
+        "status":"error",
         "code":500,
         "msg":"database is unusable"
     })))

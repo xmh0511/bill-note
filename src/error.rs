@@ -1,10 +1,17 @@
 use salvo::prelude::*;
-use serde_json::Value;
+use serde_json::{Value, json};
 pub struct JsonErr(Value);
 
 impl JsonErr {
     pub fn from_value(val: Value) -> Self {
         JsonErr(val)
+    }
+    pub fn from_error<E: std::error::Error>(code: i32, msg: E) -> Self {
+        JsonErr(json!({
+            "status":"error",
+            "code":code,
+            "msg":msg.to_string()
+        }))
     }
 }
 

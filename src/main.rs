@@ -1,14 +1,18 @@
 use config_file::FromConfigFile;
+use salvo::jwt_auth::{ConstDecoder, HeaderFinder, QueryFinder};
 use salvo::prelude::*;
 use serde::Deserialize;
 use tracing_appender::non_blocking::WorkerGuard;
+mod auth;
 mod error;
 mod orm;
+use auth::{Authority, JwtClaims};
 
 #[derive(Deserialize)]
 struct Config {
     host: String,
     database_url: String,
+    secret_key: String,
 }
 
 #[handler]
@@ -20,9 +24,22 @@ async fn hello_zh() -> error::JsonResult<&'static str> {
 async fn main() {
     let config = Config::from_config_file("./config.toml").unwrap();
     let _trracing_guard = init_log();
-    //orm::init_dao(config.database_url).await;
+    orm::init_dao(config.database_url).await;
     let acceptor = TcpListener::new(config.host).bind().await;
-    let router = Router::new().push(Router::with_path("hello").get(hello_zh));
+
+    let auth_handler: JwtAuth<JwtClaims, _> =
+        JwtAuth::new(ConstDecoder::from_secret(config.secret_key.as_bytes()))
+            .finders(vec![
+                Box::new(HeaderFinder::new()),
+                Box::new(QueryFinder::new("token")),
+                // Box::new(CookieFinder::new("jwt_token")),
+            ])
+            .force_passed(true);
+
+    let authority = Authority::new(config.secret_key);
+
+    let router = Router::new().hoop(authority);
+    let router = router.push(Router::with_path("hello").get(hello_zh));
 
     Server::new(acceptor).serve(router).await;
 }

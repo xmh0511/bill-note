@@ -23,3 +23,4 @@ tracing-subscriber = { version = "0.3", features = [
     "local-time",
 ] }
 tracing-appender = "0.2"
+jsonwebtoken = "9.3.1"
