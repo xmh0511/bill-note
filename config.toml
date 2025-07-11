@@ -1,0 +1,2 @@
+host = "0.0.0.0:8080"
+database_url = "mysql://root:970252187@host/bill_note"
