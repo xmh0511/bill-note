@@ -4,13 +4,60 @@ use chrono::{Local, NaiveDate};
 use rust_decimal::prelude::*;
 use salvo::prelude::*;
 use sea_orm::{
-    ActiveModelBehavior, ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter,
-    Statement, Value,
+    ActiveModelBehavior, ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait,
+    PaginatorTrait, QueryFilter, Statement, Value,
 };
 use serde_json::json;
 
+use crate::error::IntoJsonError;
 use crate::orm::model::{prelude::*, *};
+use rust_decimal::Decimal;
 
+#[handler]
+pub async fn registry(req: &mut Request, res: &mut Response) -> JsonResult<()> {
+    let account = req
+        .form::<String>("account")
+        .await
+        .filter(|s| !s.is_empty())
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到有效账号")))?;
+    let pass = req
+        .form::<String>("password")
+        .await
+        .filter(|s| !s.is_empty())
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到有效密码")))?;
+    if pass.chars().count() < 6 {
+        res_error(400, anyhow!("密码至少6位"))?;
+        return Ok(());
+    }
+    let db = orm::get_dao()?;
+    if UserTb::find()
+        .filter(user_tb::Column::Account.eq(&account))
+        .count(db)
+        .await
+        .json_err()?
+        != 0
+    {
+        res_error(400, anyhow!("账号已存在"))?;
+        return Ok(());
+    }
+    let salt_pass = format!("{:x}", md5::compute(pass));
+    let mut user = user_tb::ActiveModel::new();
+    user.pass = Set(salt_pass);
+    user.account = Set(account);
+    let now = Local::now().naive_local();
+    user.created_time = Set(now);
+    user.updated_time = Set(now);
+    user.insert(db).await.json_err()?;
+    res.render(Text::Json(
+        json!({
+            "status":"success",
+            "code":200,
+            "msg":"注册成功"
+        })
+        .to_string(),
+    ));
+    Ok(())
+}
 #[handler]
 pub async fn login(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
     let account = req
@@ -68,14 +115,7 @@ pub async fn bill_list(req: &mut Request, res: &mut Response, depot: &mut Depot)
     let delta_time = end.signed_duration_since(begin);
 
     if delta_time.num_seconds() < 0 {
-        res.render(Text::Json(
-            json!({
-                "status":"error",
-                "code":400,
-                "msg":"无效的日期范围"
-            })
-            .to_string(),
-        ));
+        res_error(400, anyhow!("无效的日期范围"))?;
         return Ok(());
     }
 
@@ -105,32 +145,27 @@ WHERE
         .await
         .map_err(|e| JsonErr::from_error(400, anyhow!(e)))?;
 
-    let sql2 = "SELECT
-	SUM(pay) as pay_amount
-FROM
-	bill_tb 
-WHERE
-	bill_tb.user_id = ?
-	AND bill_tb.transaction_date <= ? AND bill_tb.transaction_date >= ?";
-    let pay_amount = BillTb::find()
-        .from_raw_sql(Statement::from_sql_and_values(
-            sea_orm::DatabaseBackend::MySql,
-            sql2,
-            [
-                Value::Int(Some(user_id)),
-                Value::ChronoDate(Some(Box::new(end))),
-                Value::ChronoDate(Some(Box::new(begin))),
-            ],
-        ))
-        .into_json()
-        .one(db)
-        .await
-        .map_err(|e| JsonErr::from_error(400, anyhow!(e)))?
-        .unwrap_or(json!({}))
-        .get("pay_amount")
-        .unwrap_or(&serde_json::Value::Null)
-        .as_str()
-        .map(|x| x.to_owned());
+    let mut pay_amount = rust_decimal::Decimal::new(0, 2);
+    for bill in &result {
+        _ = bill.as_object().inspect(|v| {
+            v.get("pay").inspect(|v| {
+                v.as_str().inspect(|v| {
+                    if let Ok(v) = Decimal::from_str(v) {
+                        pay_amount += v;
+                    }
+                });
+            });
+        });
+        // if let Some(v) = bill.as_object() {
+        //     if let Some(v) = v.get("pay") {
+        //         if let Some(v) = v.as_str() {
+        //             if let Ok(v) = Decimal::from_str(v) {
+        //                 pay_amount += v;
+        //             }
+        //         }
+        //     }
+        // }
+    }
     res.render(Text::Json(
         json!({
             "status":"success",
@@ -185,17 +220,10 @@ pub async fn bill_add(req: &mut Request, res: &mut Response, depot: &mut Depot) 
         .filter(tag_tb::Column::UserId.eq(user_id))
         .one(db)
         .await
-        .map_err(|e| JsonErr::from_error(500, anyhow!(e)))?
+        .json_err()?
         .is_none()
     {
-        res.render(Text::Json(
-            json!({
-                "status":"error",
-                "code":400,
-                "msg":"无效的标签"
-            })
-            .to_string(),
-        ));
+        res_error(400, anyhow!("无效的标签"))?;
         return Ok(());
     }
 
@@ -209,9 +237,46 @@ pub async fn bill_add(req: &mut Request, res: &mut Response, depot: &mut Depot) 
     let now = Local::now().naive_local();
     info.created_time = Set(now);
     info.updated_time = Set(now);
-    info.insert(db)
+    info.insert(db).await.json_err()?;
+    res.render(Text::Json(
+        json!({
+            "status":"success",
+            "code":200,
+            "msg":"新增成功"
+        })
+        .to_string(),
+    ));
+    Ok(())
+}
+
+#[handler]
+pub async fn add_tag(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
+    let user_id = *depot
+        .get::<i32>("user_id")
+        .map_err(|_e| JsonErr::from_error(401, anyhow!("unknown user")))?;
+    let name = req
+        .form::<String>("name")
         .await
-        .map_err(|e| JsonErr::from_error(500, anyhow!(e)))?;
+        .ok_or(JsonErr::from_error(400, anyhow!("未获取到有效标签")))?;
+    let db = orm::get_dao()?;
+    if TagTb::find()
+        .filter(tag_tb::Column::UserId.eq(user_id))
+        .filter(tag_tb::Column::Name.eq(&name))
+        .count(db)
+        .await
+        .json_err()?
+        != 0
+    {
+        res_error(400, anyhow!("标签已存在"))?;
+        return Ok(());
+    }
+    let mut info = tag_tb::ActiveModel::new();
+    info.name = Set(name);
+    info.user_id = Set(user_id);
+    let now = Local::now().naive_local();
+    info.created_time = Set(now);
+    info.updated_time = Set(now);
+    info.insert(db).await.json_err()?;
     res.render(Text::Json(
         json!({
             "status":"success",

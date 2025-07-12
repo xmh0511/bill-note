@@ -14,6 +14,7 @@ struct Config {
     host: String,
     database_url: String,
     secret_key: String,
+    base_path: String,
 }
 
 #[handler]
@@ -39,15 +40,26 @@ async fn main() {
 
     let authority = Authority::new(config.secret_key);
 
-    let router = Router::new().hoop(authority);
+    let router = if config.base_path.is_empty() {
+        Router::new()
+    } else {
+        Router::with_path(config.base_path)
+    }
+    .hoop(authority);
     let router = router.push(Router::with_path("login").post(bill::login));
+    let router = router.push(Router::with_path("reg").post(bill::registry));
 
     let bill_router = Router::with_path("bill");
     let bill_router = bill_router.push(Router::with_path("list").get(bill::bill_list));
     let bill_router = bill_router.push(Router::with_path("add").post(bill::bill_add));
+
+    let tag_router = Router::with_path("tag");
+    let tag_router = tag_router.push(Router::with_path("add").post(bill::add_tag));
+
     let auth_router = Router::with_hoop(auth_handler)
         .hoop(auth::check_auth_id)
-        .push(bill_router);
+        .push(bill_router)
+        .push(tag_router);
 
     let router = router.push(auth_router);
 

@@ -1,5 +1,8 @@
+use anyhow::anyhow;
 use salvo::prelude::*;
+use sea_orm::DbErr;
 use serde_json::{Value, json};
+use std::convert::Infallible;
 pub struct JsonErr(StatusCode, Value);
 
 impl JsonErr {
@@ -15,6 +18,20 @@ impl JsonErr {
                 "msg":msg.to_string()
             }),
         )
+    }
+}
+
+pub fn res_error(code: i32, msg: anyhow::Error) -> JsonResult<Infallible> {
+    Err(JsonErr::from_error(code, msg))
+}
+
+pub trait IntoJsonError<T> {
+    fn json_err(self) -> JsonResult<T>;
+}
+
+impl<T> IntoJsonError<T> for Result<T, DbErr> {
+    fn json_err(self) -> JsonResult<T> {
+        self.map_err(|e| JsonErr::from_error(500, anyhow!(e)))
     }
 }
 
