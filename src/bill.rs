@@ -5,7 +5,7 @@ use rust_decimal::prelude::*;
 use salvo::prelude::*;
 use sea_orm::{
     ActiveModelBehavior, ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait,
-    PaginatorTrait, QueryFilter, Statement, Value,
+    IntoActiveModel, PaginatorTrait, QueryFilter, Statement, Value,
 };
 use serde_json::json;
 
@@ -250,6 +250,66 @@ pub async fn bill_add(req: &mut Request, res: &mut Response, depot: &mut Depot) 
 }
 
 #[handler]
+pub async fn del_bill(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
+    let user_id = *depot
+        .get::<i32>("user_id")
+        .map_err(|_e| JsonErr::from_error(401, anyhow!("unknown user")))?;
+    let bill_id = req
+        .form::<i32>("id")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未找到有效的账单ID")))?;
+    let db = orm::get_dao()?;
+    if let Some(info) = BillTb::find()
+        .filter(bill_tb::Column::Id.eq(bill_id))
+        .filter(bill_tb::Column::UserId.eq(user_id))
+        .one(db)
+        .await
+        .json_err()?
+    {
+        let info = info.into_active_model();
+        info.delete(db).await.json_err()?;
+        res.render(Text::Json(
+            json!({
+                "status":"success",
+                "code":200,
+                "msg":"删除成功"
+            })
+            .to_string(),
+        ));
+    } else {
+        res_error(400, anyhow!("无效的账单"))?;
+    }
+    Ok(())
+}
+
+#[handler]
+pub async fn tag_list(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
+    let user_id = *depot
+        .get::<i32>("user_id")
+        .map_err(|_e| JsonErr::from_error(401, anyhow!("unknown user")))?;
+    let db = orm::get_dao()?;
+    let list = TagTb::find()
+        .filter(tag_tb::Column::UserId.eq(user_id))
+        .into_json()
+        .all(db)
+        .await
+        .json_err()?;
+    res.render(Text::Json(
+        json!({
+            "status":"success",
+            "code":200,
+            "msg":{
+                "data":{
+                    "list":list
+                }
+            }
+        })
+        .to_string(),
+    ));
+    Ok(())
+}
+
+#[handler]
 pub async fn add_tag(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
     let user_id = *depot
         .get::<i32>("user_id")
@@ -285,5 +345,38 @@ pub async fn add_tag(req: &mut Request, res: &mut Response, depot: &mut Depot) -
         })
         .to_string(),
     ));
+    Ok(())
+}
+
+#[handler]
+pub async fn del_tag(req: &mut Request, res: &mut Response, depot: &mut Depot) -> JsonResult<()> {
+    let user_id = *depot
+        .get::<i32>("user_id")
+        .map_err(|_e| JsonErr::from_error(401, anyhow!("unknown user")))?;
+    let tag_id = req
+        .form::<i32>("id")
+        .await
+        .ok_or(JsonErr::from_error(400, anyhow!("未找到有效的账单ID")))?;
+    let db = orm::get_dao()?;
+    if let Some(info) = TagTb::find()
+        .filter(tag_tb::Column::Id.eq(tag_id))
+        .filter(tag_tb::Column::UserId.eq(user_id))
+        .one(db)
+        .await
+        .json_err()?
+    {
+        let info = info.into_active_model();
+        info.delete(db).await.json_err()?;
+        res.render(Text::Json(
+            json!({
+                "status":"success",
+                "code":200,
+                "msg":"删除成功"
+            })
+            .to_string(),
+        ));
+    } else {
+        res_error(400, anyhow!("无效的标签"))?;
+    }
     Ok(())
 }

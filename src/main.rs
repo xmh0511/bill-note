@@ -52,9 +52,11 @@ async fn main() {
     let bill_router = Router::with_path("bill");
     let bill_router = bill_router.push(Router::with_path("list").get(bill::bill_list));
     let bill_router = bill_router.push(Router::with_path("add").post(bill::bill_add));
+    let bill_router = bill_router.push(Router::with_path("del").post(bill::del_bill));
 
     let tag_router = Router::with_path("tag");
     let tag_router = tag_router.push(Router::with_path("add").post(bill::add_tag));
+    let tag_router = tag_router.push(Router::with_path("list").post(bill::tag_list));
 
     let auth_router = Router::with_hoop(auth_handler)
         .hoop(auth::check_auth_id)
