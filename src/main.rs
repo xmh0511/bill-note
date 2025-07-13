@@ -57,6 +57,7 @@ async fn main() {
     let tag_router = Router::with_path("tag");
     let tag_router = tag_router.push(Router::with_path("add").post(bill::add_tag));
     let tag_router = tag_router.push(Router::with_path("list").post(bill::tag_list));
+    let tag_router = tag_router.push(Router::with_path("del").post(bill::del_tag));
 
     let auth_router = Router::with_hoop(auth_handler)
         .hoop(auth::check_auth_id)
